@@ -8,8 +8,13 @@ import torch.optim as optim
 from PIL import Image
 from torchvision.transforms import ToTensor, ToPILImage, Resize
 import os
+from numpy.random import randint
+
+
 class VGG_encoder(nn.Module):
     def __init__(self):
+        #VGG-Facenet
+
         super().__init__()
         self.block_size = [2,2,3,3,3]
         self.conv_1_1 = nn.Conv2d(1,64,3,stride=1,padding=1)
@@ -26,7 +31,7 @@ class VGG_encoder(nn.Module):
         self.conv_5_2 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
         self.conv_5_3 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
 
-        self.adda = nn.AdaptiveMaxPool2d((7,7))
+        self.adda = nn.AdaptiveMaxPool2d((7,7))     #Added adaptive pooling
         self.fc6 = nn.Linear(512 * 7 * 7, 4096)
         self.fc7 = nn.Linear(4096, 4096)
         self.fc8 = nn.Linear(4096, 2622)
@@ -68,7 +73,17 @@ class custom_dataset(Dataset):
     def __init__(self,folderpath):
         self.img_path = folderpath
 
-        self.file_list = os.listdir(folderpath)
+        subfolderlist = os.listdir(self.img_path)
+        self.file_list = []
+        self.folder_list = []
+        for subfolder in subfolderlist:
+
+            im_path = os.listdir(self.img_path + "/" + subfolder)
+            self.file_list.extend(im_path)
+            self.folder_list.extend([self.img_path + subfolder + "/" for s in im_path] )    
+            #print(self.file_list)
+            #print(self.ID_list)
+
     #It should return one of all images togather with the individual ID and the imageID
 
 
@@ -76,11 +91,37 @@ class custom_dataset(Dataset):
         return self.file_list.__len__()
 
     def __getitem__(self, idx):
-        name = self.file_list[idx]
-        data = Image.open(self.img_path + name)
+        filename = self.file_list[idx]
+        foldername = self.folder_list[idx]
+
+        full_path = foldername + "/" + filename
+        data_a = Image.open(full_path)
+        
+        pos_list = os.listdir(foldername)
+        
+        while True:
+            pos_int = randint(0,pos_list.__len__())
+            pos_filename = pos_list[pos_int]
+            if pos_filename != filename:
+                break
+        pos_fullpath = foldername + "/" + pos_filename
+        data_p = Image.open(pos_fullpath)
+
+
+        while True:
+            neg_int = randint(0,self.__len__())
+            neg_folder = self.folder_list[neg_int]
+            neg_file = self.file_list[neg_int]
+
+            if neg_folder !=foldername:
+                break
+        neg_fullpath = neg_folder + "/" + neg_file
+        data_n = Image.open(neg_fullpath)
+
+
         re = Resize((128, 256))
         trans = ToTensor()
-        return trans(re(data))       
+        return (trans(re(data_a)),trans(re(data_p)), trans(re(data_n)))       
 
         #Here we should return (anchor, positive,negative as a tuple)
 
@@ -97,18 +138,27 @@ class network():
         self.model.train()
 
         train_set = custom_dataset(folderpath)
-        train_loader = DataLoader(train_set,batch_size=64,shuffle=True)
+        train_loader = DataLoader(train_set,batch_size=16,shuffle=True)
         triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
+
+        optimizer = optim.Adam(self.model.parameters(),lr = 0.001)
 
         for epoch in range(epochs):
             cum_loss = 0
-
-            for ii,im in enumerate(train_loader):
+            for ii,(im,im_pos,im_neg) in enumerate(train_loader):
+                optimizer.zero_grad()
                 anchor = self.model(im)
                 positive = self.model(im_pos)
                 negative = self.model(im_neg)
 
                 loss = triplet_loss(anchor, positive, negative)
+                loss.backward()
+                optimizer.step()
+                cum_loss += loss.item()
+                if ii % 1000 == 19:
+                    print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, cum_loss / 2000))
+                    cum_loss = 0
+
 
 
         return
