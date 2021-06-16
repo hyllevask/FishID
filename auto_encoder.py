@@ -1,4 +1,5 @@
 from torch import  nn
+import torch
 from torch.utils.data import Dataset, DataLoader
 #import matplotlib.pyplot as plt
 import numpy as np
@@ -130,7 +131,11 @@ class custom_dataset(Dataset):
 class network():
     def __init__(self):
         self.model = VGG_encoder()
-
+        if torch.cuda.is_available():  
+            self.device = "cuda:0" 
+        else:  
+            self.device = "cpu" 
+        self.model.to(torch.device(self.device))
 
 
 
@@ -138,14 +143,18 @@ class network():
         self.model.train()
 
         train_set = custom_dataset(folderpath)
-        train_loader = DataLoader(train_set,batch_size=16,shuffle=True)
+        train_loader = DataLoader(train_set,batch_size=4,shuffle=True)
         triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
 
-        optimizer = optim.Adam(self.model.parameters(),lr = 0.001)
+        optimizer = optim.Adam(self.model.parameters(),lr = 0.01)
 
         for epoch in range(epochs):
             cum_loss = 0
             for ii,(im,im_pos,im_neg) in enumerate(train_loader):
+                #print(ii)
+                im = im.to(torch.device(self.device))
+                im_pos = im_pos.to(torch.device(self.device))
+                im_neg = im_neg.to(torch.device(self.device))
                 optimizer.zero_grad()
                 anchor = self.model(im)
                 positive = self.model(im_pos)
@@ -155,8 +164,8 @@ class network():
                 loss.backward()
                 optimizer.step()
                 cum_loss += loss.item()
-                if ii % 1000 == 19:
-                    print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, cum_loss / 2000))
+                if ii % 20 == 19:
+                    print('[%d, %5d] loss: %.3f' % (epoch + 1, ii + 1, cum_loss / 2000))
                     cum_loss = 0
 
 
