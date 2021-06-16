@@ -10,7 +10,7 @@ from PIL import Image
 from torchvision.transforms import ToTensor, ToPILImage, Resize
 import os
 from numpy.random import randint
-
+from torch.optim.lr_scheduler import LambdaLR
 
 class VGG_encoder(nn.Module):
     def __init__(self):
@@ -146,8 +146,9 @@ class network():
         train_loader = DataLoader(train_set,batch_size=4,shuffle=True)
         triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
 
-        optimizer = optim.Adam(self.model.parameters(),lr = 0.01)
-
+        optimizer = optim.Adam(self.model.parameters(),lr = 0.001)
+        lamb = lambda epoch : epoch*0.5
+        scheduler = LambdaLR(optimizer, lr_lambda=lamb)
         for epoch in range(epochs):
             cum_loss = 0
             for ii,(im,im_pos,im_neg) in enumerate(train_loader):
@@ -167,7 +168,7 @@ class network():
                 if ii % 20 == 19:
                     print('[%d, %5d] loss: %.3f' % (epoch + 1, ii + 1, cum_loss / 2000))
                     cum_loss = 0
-
+            scheduler.step()
 
 
         return
@@ -203,3 +204,5 @@ if __name__ == "__main__":
         net.single(args["folderpath"])
     else:
         print("Incorrect Mode")
+
+    print("Done")
